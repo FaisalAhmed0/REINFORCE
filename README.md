@@ -27,3 +27,6 @@ python train.py --env "CartPole-v0"
 tensorboard --logir ./runs
 ```
 ### after the training finshs you can run a video on the videos folder
+
+TODO
+1. Add the value function baseline.
