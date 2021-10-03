@@ -31,7 +31,8 @@ if __name__ == "__main__":
     if env_name  not in env_ids:
         raise "Environment does not exist, check the envionment name"
     # train the model
-    model = train(env_name)
+    action_type = "discrete" if type(gym.make(env_name).action_space) == gym.spaces.Discrete else "continuous"
+    model = train(env_name, action_type=action_type)
     # record a video
     record_video(env_name, model)
     
