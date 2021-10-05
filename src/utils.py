@@ -5,7 +5,7 @@ import torch
 import torch.optim as opt
 from torch.utils.tensorboard import SummaryWriter
 
-from src.model import MLP_policy
+from src.model import MLP_policy, MLP_value
 from src.config import args
 
 
@@ -36,9 +36,14 @@ def train(env_name, action_type="discrete"):
         model = MLP_policy(env.observation_space.shape[0], args.n_hiddens, env.action_space.n, "discrete")
     else:
         model = MLP_policy(env.observation_space.shape[0], args.n_hiddens, env.action_space.shape[0], "continuous")
-
     # create the optimizer
     optimizer = opt.Adam(model.parameters(), lr=args.lr)
+
+    if args.baseline == 2:
+        # create the value model
+        model_v = MLP_value(env.observation_space.shape[0], [64])
+        # create the optimizer
+        value_optimizer = opt.Adam(model_v.parameters(), lr=args.lr)
 
     # create a summaryWriter
     sw = SummaryWriter(comment=f"env_name:{env_name}, lr={args.lr}, batch_size={args.batch_size}, baseline: {args.baseline}, entropy: {args.entropy}")
@@ -51,6 +56,8 @@ def train(env_name, action_type="discrete"):
         entropy_avg = 0
 
         batch_loss = torch.zeros(1)
+        if args.baseline == 2:
+            value_batch_loss = torch.zeros(1)
 
         max_reward = -1000000
         min_reward = 1000000
@@ -58,6 +65,7 @@ def train(env_name, action_type="discrete"):
             rewards = []
             log_probs = []
             entropies = []
+            value_baseline = []
             state = env.reset()
             done = False
             while not done:
@@ -70,25 +78,36 @@ def train(env_name, action_type="discrete"):
                 rewards.append(reward)
                 log_probs.append(log_prob)
                 entropies.append(model.entropy())
+                if args.baseline == 2:
+                    value_baseline.append(model_v(state_t))
+
                 state = next_state
+
             cum_reward = reward_to_go(rewards, gamma=args.gamma)
             loss = torch.zeros(1)
-            if args.baseline:
-                avg_reward_baseline = sum(cum_reward) / len(cum_reward)
-            # print(rewards)
-            # print(avg_reward_baseline)
-            for log, r, ent in zip(log_probs, cum_reward, entropies):
-                if avg_reward_baseline and (not args.entropy):
-                    loss -= (log * (r - avg_reward_baseline))
-                elif avg_reward_baseline and (args.entropy):
-                    loss -= (log * (r - avg_reward_baseline + args.temp * ent ))
-                elif args.entropy:
-                    # print("here")
-                    loss -= (log * (r + args.temp * ent))
-                else:
-                    loss -= (log * r )
+            value_loss = torch.zeros(1)
+
+            for i in range(len(log_probs)):
+                log_prob = log_probs[i]
+                r = cum_reward[i]
+                # weight = torch.zeros(1)
+                # weight += r
+                if args.baseline:
+                    if args.baseline == 1:
+                        b = compute_baseline(cum_reward, btype=args.baseline)
+                        r = r -  b
+                    else:
+                        b = value_baseline[i]
+                        r = r -  b
+                if args.entropy:
+                    r = r + (temp * entropies[i])
+                loss -= (log_prob * r.detach())
+                if args.baseline == 2:
+                    value_loss += (r - b)**2
 
             batch_loss += loss
+            if args.baseline == 2:
+                value_batch_loss += value_loss
             rewards_avg += sum(rewards)
             entropy_avg += sum(entropies)
             max_reward = sum(rewards) if sum(rewards) > max_reward else max_reward
@@ -99,17 +118,28 @@ def train(env_name, action_type="discrete"):
         rewards_avg /= args.batch_size
         entropy_avg /= args.batch_size
 
+        # optimize the value
+        if args.baseline == 2:
+            value_batch_loss /= args.batch_size
+            value_optimizer.zero_grad()
+            value_batch_loss.backward()
+            value_optimizer.step()
+
         optimizer.zero_grad()
         batch_loss.backward()
         optimizer.step()
+        
         # calculate the gradient norm
         grad_norm = gradient_norm(model)
         # log values into tensorboard
-        log_values(sw, iter, reward=rewards_avg, loss=batch_loss, gradient_norm=grad_norm, entropy=entropy_avg, 
-                    maximum_reward=max_reward, minimum_reward=min_reward)
-        print(f"Iteration:{iter+1}, reward: {rewards_avg}, batch loss: {batch_loss}")
-        # sw.add_scalar("reward", rewards_avg, iter)
-        # sw.add_scalar("loss", batch_loss, iter)
+        if args.baseline == 2:
+            log_values(sw, iter, reward=rewards_avg, loss=batch_loss, gradient_norm=grad_norm, entropy=entropy_avg, maximum_reward=max_reward, minimum_reward=min_reward, value_loss=value_batch_loss)
+        elif args.baseline == 1:
+            log_values(sw, iter, reward=rewards_avg, loss=batch_loss, gradient_norm=grad_norm, entropy=entropy_avg, maximum_reward=max_reward, minimum_reward=min_reward, avg_reward_baseline=compute_baseline(cum_reward, btype=args.baseline))
+        else:
+            log_values(sw, iter, reward=rewards_avg, loss=batch_loss, gradient_norm=grad_norm, entropy=entropy_avg, maximum_reward=max_reward, minimum_reward=min_reward)
+        print(f"Iteration:{iter+1}, reward: {rewards_avg}, batch loss: {batch_loss.cpu().detach().item()}")
+        
     return model
 
 
@@ -152,3 +182,13 @@ def log_values(sw, iter, **kwargs):
   # print("Here")
   for k in kwargs:
     sw.add_scalar(k, kwargs[k], iter+1)
+
+
+def compute_baseline(cum_rewards, model=None, state=None, btype=None):
+  '''
+  Function to compute the baseline based on the specified type
+  '''
+  if btype == 1: # average reward baseline
+    return cum_rewards.mean()
+  elif btype == 2: # value function baseline (state dependant baseline)
+    return model(state)

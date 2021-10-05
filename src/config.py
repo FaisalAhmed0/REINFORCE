@@ -12,7 +12,7 @@ env_name = "CartPole-v0",
 batch_size = 32,
 
 # iterations
-iterations = 100,
+iterations = 205,
 
 # gamma
 gamma = 0.99,
@@ -23,11 +23,12 @@ n_hiddens = [64],
 # temperature of the entropy term
 temp = 0.1,
 
-# use a baseline 
-baseline = False,
+# baseline type
+# baseline type 1: avergae reward, 2: value function
+baseline = 2,
 
 # use entropy regulrization
-entropy = True, 
+entropy = False, 
 
 # radnom seed
-seed = 1234)
+seed = 42)

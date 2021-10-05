@@ -55,3 +55,24 @@ class MLP_policy(nn.Module):
     else:
       return self.actions_dist.entropy()
 
+
+# Value function model
+class MLP_value(nn.Module):
+  def __init__(self, n_input, n_hiddens):
+    super().__init__()
+    layers = []
+    layers.append(nn.Linear(n_input, n_hiddens[0]))
+    layers.append(nn.ReLU())
+    for i in range(len(n_hiddens)-1):
+      layers.append( nn.Linear(n_hiddens[i], n_hiddens[i+1]) )
+      layers.append( nn.ReLU() )
+    self.model = nn.Sequential(*layers)
+    self.out = nn.Linear(n_hiddens[-1], 1)
+
+
+  def forward(self, x):
+    x = self.model(x)
+    x = self.out(x)
+    return x
+
+
