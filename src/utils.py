@@ -51,6 +51,8 @@ def train(env_name, action_type="discrete"):
 
     avg_reward_baseline = None
 
+    global_max = 0
+
     for iter in range(args.iterations):
         rewards_avg = 0
         entropy_avg = 0
@@ -117,6 +119,11 @@ def train(env_name, action_type="discrete"):
         batch_loss /= args.batch_size
         rewards_avg /= args.batch_size
         entropy_avg /= args.batch_size
+
+        if max_reward > global_max:
+            global_max = max_reward
+            print(f"Model saved with maximum reward of {max_reward}")
+            torch.save(model.state_dict(), "./checkpoints/best_model.ckpt")
 
         # optimize the value
         if args.baseline == 2:

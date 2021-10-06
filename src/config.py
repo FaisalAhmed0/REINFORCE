@@ -12,23 +12,23 @@ env_name = "CartPole-v0",
 batch_size = 32,
 
 # iterations
-iterations = 205,
+iterations = 300,
 
 # gamma
 gamma = 0.99,
 
 # size of the mlp hidden layers
-n_hiddens = [64],
+n_hiddens = [64, 32],
 
 # temperature of the entropy term
-temp = 0.1,
+temp = 1,
 
 # baseline type
 # baseline type 1: avergae reward, 2: value function
-baseline = 2,
+baseline = 0,
 
 # use entropy regulrization
-entropy = False, 
+entropy = True, 
 
 # radnom seed
 seed = 42)
