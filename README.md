@@ -28,5 +28,5 @@ python train.py --env "CartPole-v0"
 ```bash
 tensorboard --logir ./runs
 ```
-### after the training finshs you can run a video on the videos folder
+### after the training finsh you can run a video on the videos folder
 
